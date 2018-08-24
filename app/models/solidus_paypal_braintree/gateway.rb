@@ -367,6 +367,16 @@ module SolidusPaypalBraintree
         params[:payment_method_nonce] = payment.source.nonce
       end
 
+      merchant_account_id = merchant_account_for(
+        payment.source,
+        { currency: payment.currency }
+      )
+      if merchant_account_id
+        params[:credit_card] ||= {}
+        params[:credit_card][:options] ||= {}
+        params[:credit_card][:options][:verification_merchant_account_id] = merchant_account_id
+      end
+
       params
     end
   end
