@@ -6,6 +6,7 @@ module SolidusPaypalBraintree
     APPLE_PAY = "ApplePayCard"
     CREDIT_CARD = "CreditCard"
 
+    belongs_to :braintree_payment_method, polymorphic: true
     belongs_to :user, class_name: Spree::UserClassHandle.new
     belongs_to :payment_method, class_name: 'Spree::PaymentMethod'
     has_many :payments, as: :source, class_name: "Spree::Payment"
@@ -17,6 +18,9 @@ module SolidusPaypalBraintree
     scope(:with_payment_profile, -> { joins(:customer) })
     scope(:credit_card, -> { where(payment_type: CREDIT_CARD) })
 
+    ###### Below delegation and alias methods shall be removed soon.
+    # Once juulio starts calling source.braintree_payment_method.last_digit etc
+    # We can remove these. As they do not make sense for all payment sources
     delegate :last_4, :card_type, :expiration_month, :expiration_year,
       to: :braintree_payment_method, allow_nil: true
 
@@ -80,9 +84,9 @@ module SolidusPaypalBraintree
 
     private
 
-    def braintree_payment_method
+    def braintree_payment_method_fetch
       return unless braintree_client && credit_card?
-      @braintree_payment_method ||= protected_request do
+      protected_request do
         braintree_client.payment_method.find(token)
       end
     rescue ActiveMerchant::ConnectionError, ArgumentError => e
