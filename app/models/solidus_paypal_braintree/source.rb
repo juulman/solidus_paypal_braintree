@@ -6,6 +6,8 @@ module SolidusPaypalBraintree
     APPLE_PAY = "ApplePayCard"
     CREDIT_CARD = "CreditCard"
 
+
+    belongs_to :payment_details, polymorphic: true
     belongs_to :user, class_name: Spree::UserClassHandle.new
     belongs_to :payment_method, class_name: 'Spree::PaymentMethod'
     has_many :payments, as: :source, class_name: "Spree::Payment"
@@ -18,7 +20,7 @@ module SolidusPaypalBraintree
     scope(:credit_card, -> { where(payment_type: CREDIT_CARD) })
 
     delegate :last_4, :card_type, :expiration_month, :expiration_year,
-      :cardholder_name, to: :braintree_payment_method, allow_nil: true
+      :cardholder_name, to: :payment_details_computed, allow_nil: true
 
     # Aliases to match Spree::CreditCard's interface
     alias_method :last_digits, :last_4
@@ -80,11 +82,25 @@ module SolidusPaypalBraintree
 
     private
 
-    def braintree_payment_method
+    def persist_credit_card_info(payment_details_returned)
+      self.payment_details = SolidusPaypalBraintree::CreditCard.create!(
+        last_4: payment_details_returned.last_4,
+        expiration_month: payment_details_returned.expiration_month,
+        expiration_year: payment_details_returned.expiration_year,
+        card_type: payment_details_returned.card_type,
+        cardholder_name: payment_details_returned.cardholder_name
+      )
+      self.payment_details.save!
+      self.payment_details
+    end
+
+    def payment_details_computed
       return unless braintree_client && credit_card?
-      @braintree_payment_method ||= protected_request do
+      return payment_details if payment_details
+      payment_details_returned = protected_request do
         braintree_client.payment_method.find(token)
       end
+      persist_credit_card_info(payment_details_returned)
     rescue ActiveMerchant::ConnectionError, ArgumentError => e
       Rails.logger.warn("#{e}: token unknown or missing for #{inspect}")
       nil
