@@ -243,7 +243,7 @@ RSpec.describe SolidusPaypalBraintree::Source, type: :model do
         payment_source.update_attributes!(token: method.payment_method.token)
       end
 
-      it "delegates to the braintree payment method" do
+      it "delegates to the payment_details" do
         method = braintree_client.payment_method.find(payment_source.token)
         expect(subject).to eql(method.last_4)
       end
@@ -303,7 +303,7 @@ RSpec.describe SolidusPaypalBraintree::Source, type: :model do
         payment_source.update_attributes!(token: method.payment_method.token)
       end
 
-      it "delegates to the braintree payment method" do
+      it "delegates to the payment details computed" do
         method = braintree_client.payment_method.find(payment_source.token)
         expect(subject).to eql(method.card_type)
       end
@@ -319,6 +319,87 @@ RSpec.describe SolidusPaypalBraintree::Source, type: :model do
       include_context 'nil source token'
 
       it { is_expected.to be_nil }
+    end
+  end
+
+  describe '#payment_details_computed' do
+    let(:method) { new_gateway.tap(&:save!) }
+    let(:payment_source) { described_class.create!(payment_type: 'CreditCard', payment_method: method) }
+    let(:braintree_client) { method.braintree }
+    let(:dummy_credit_card) do
+      double(
+          'credit_card',
+          card_type: 'card_type',
+          expiration_month: 'expiration_month',
+          expiration_year: 'expiration_year',
+          cardholder_name: 'cardholder_name',
+          last_4: 'last_4'
+      )
+    end
+    let(:payment_method_gateway) { double('payment_method_gateway', find: dummy_credit_card) }
+
+    shared_context 'credit card created' do
+      it 'ensure a credit card record is created' do
+        expect(payment_source.payment_details).to be_nil
+        subject
+        expect(payment_source.payment_details).to be
+      end
+    end
+
+    context 'when credit_card attributes are accessed multiple times' do
+      before do
+        allow(braintree_client).to receive(:payment_method).and_return(payment_method_gateway)
+      end
+
+      context 'when last_digits is accessed multiple times' do
+        include_context 'credit card created'
+        subject { 2.times.collect { payment_source.last_digits }.last }
+
+        it 'ensures that braintree gateway is called just once' do
+          expect(payment_method_gateway).to receive(:find).once
+          expect(subject).to eql('last_4')
+        end
+      end
+
+      context 'when year is accessed multiple times' do
+        include_context 'credit card created'
+        subject { 2.times.collect { payment_source.year }.last }
+
+        it 'ensures that braintree gateway is called just once' do
+          expect(payment_method_gateway).to receive(:find).once
+          expect(subject).to eql('expiration_year')
+        end
+      end
+
+      context 'when month is accessed multiple times' do
+        include_context 'credit card created'
+        subject { 2.times.collect { payment_source.month }.last }
+
+        it 'ensures that braintree gateway is called just once' do
+          expect(payment_method_gateway).to receive(:find).once
+          expect(subject).to eql('expiration_month')
+        end
+      end
+
+      context 'when name is accessed multiple times' do
+        include_context 'credit card created'
+        subject { 2.times.collect { payment_source.name }.last }
+
+        it 'ensures that braintree gateway is called just once' do
+          expect(payment_method_gateway).to receive(:find).once
+          expect(subject).to eql('cardholder_name')
+        end
+      end
+
+      context 'when cc_type is accessed multiple times' do
+        include_context 'credit card created'
+        subject { 2.times.collect { payment_source.cc_type }.last }
+
+        it 'ensures that braintree gateway is called just once' do
+          expect(payment_method_gateway).to receive(:find).once
+          expect(subject).to eql('card_type')
+        end
+      end
     end
   end
 end
